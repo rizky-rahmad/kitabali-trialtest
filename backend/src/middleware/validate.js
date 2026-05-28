@@ -4,7 +4,7 @@
  * is attached to req.validatedBody. On failure, a 400 with a `details[]` array
  * is forwarded to the error handler.
  */
-const ApiError = require("../utils/ApiError");
+import ApiError from "../utils/ApiError.js";
 
 const validate = (schema) => (req, _res, next) => {
   const result = schema.safeParse(req.body);
@@ -19,4 +19,4 @@ const validate = (schema) => (req, _res, next) => {
   next();
 };
 
-module.exports = validate;
+export default validate;

@@ -4,7 +4,7 @@
  * public (API) representation. Keeping serialization here means we control
  * exactly what leaves the system from one place.
  */
-const COLUMNS = [
+export const COLUMNS = [
   "id",
   "name",
   "email",
@@ -18,7 +18,7 @@ const COLUMNS = [
 ];
 
 /** Map a raw DB row to the shape returned by the API. */
-function toPublic(row) {
+export function toPublic(row) {
   if (!row) return null;
   return {
     id: row.id,
@@ -33,5 +33,3 @@ function toPublic(row) {
     created_at: row.created_at,
   };
 }
-
-module.exports = { COLUMNS, toPublic };

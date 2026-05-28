@@ -1,389 +1,341 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
 
 /**
- * BookingFlow.jsx
- * Multi-step reservation form. Posts to `${VITE_API_URL}/api/bookings`.
+ * BookingFlow.jsx — "Your VIP Reservation 🏆"
+ * Visual replica of list.thisbali.com (from screenshot).
  *
- * Payload matches server.js exactly:
- *   { name, email, phone, booking_date, booking_time, guests, message }
+ * Layout: 2-col on desktop (image LEFT sticky, form RIGHT scrollable).
+ *         Single-page form — no multi-step. All fields visible at once.
  *
- * Env:  VITE_API_URL=https://<your-cloudflared-tunnel>.trycloudflare.com
+ * Connected to backend: POST ${VITE_API_URL}/api/bookings
  */
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-const HERO =
-  "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?auto=format&fit=crop&w=1200&q=80";
+
+/* ── Left-panel restaurant photo ─────────────────────────────────── */
+const PANEL_IMG =
+  "https://thisbali.com/wp-content/uploads/2025/11/THIS-IS-BALI-2.webp";
+
+/* ── Party size options ───────────────────────────────────────────── */
+const SIZES = ["1 person","2 people","3 people","4 people",
+               "5 people","6 people","7 people","8 people",
+               "9 people","10+ people"];
+
+/* ── Time slots 11:00 → 22:00 (last order 22:15) every 30 min ───── */
+const TIME_SLOTS = Array.from({ length: 23 }, (_, i) => {
+  const mins = 11 * 60 + i * 30;
+  const h = String(Math.floor(mins / 60)).padStart(2, "0");
+  const m = String(mins % 60).padStart(2, "0");
+  const label = new Date(`2000-01-01T${h}:${m}`)
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return { value: `${h}:${m}`, label };
+});
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STEPS = ["Your Stay", "Your Details", "Confirm"];
 
-const EMPTY = {
-  name: "",
-  email: "",
-  phone: "",
-  booking_date: "",
-  booking_time: "",
-  guests: 2,
-  message: "",
-};
+/* ── Small icon components ───────────────────────────────────────── */
+const IconPerson  = () => <svg className="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>;
+const IconEmail   = () => <svg className="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>;
+const IconCal     = () => <svg className="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>;
+const IconPencil  = () => <svg className="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
 
+/* ── Field wrapper ───────────────────────────────────────────────── */
+function Field({ label, error, children }) {
+  return (
+    <div className="mb-6">
+      <label className="mb-2 block text-sm font-semibold text-gray-800">{label}</label>
+      {children}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+/* ── Input with optional leading icon ───────────────────────────── */
+function IconInput({ icon, error, ...props }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-lg border bg-white px-3 py-3 transition-colors
+      ${error ? "border-red-400 bg-red-50/30" : "border-gray-200 focus-within:border-gray-400"}`}>
+      {icon && <span className="shrink-0">{icon}</span>}
+      <input
+        className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
+        {...props}
+      />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
 export default function BookingFlow() {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState(EMPTY);
-  const [errors, setErrors] = useState({});
-  const [status, setStatus] = useState("idle"); // idle | submitting | success | error
-  const [serverError, setServerError] = useState("");
-  const [confirmation, setConfirmation] = useState(null);
+  const today = new Date().toISOString().split("T")[0];
+
+  const [form, setForm] = useState({
+    name: "", email: "", phone: "", guests: "",
+    booking_date: "", booking_time: "", message: "",
+  });
+  const [errors, setErrors]     = useState({});
+  const [status, setStatus]     = useState("idle"); // idle | submitting | success | error
+  const [serverErr, setServerErr] = useState("");
+  const [confirmed, setConfirmed] = useState(null);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  /* ---- per-step validation ---- */
-  const validateStep = (s) => {
+  /* ── Validation ─────────────────────────────────────────────── */
+  function validate() {
     const e = {};
-    if (s === 0) {
-      if (!form.booking_date) e.booking_date = "Please choose a date.";
-      else if (new Date(form.booking_date) < new Date(new Date().toDateString()))
-        e.booking_date = "Date can't be in the past.";
-      if (!form.guests || Number(form.guests) < 1)
-        e.guests = "At least one guest.";
-    }
-    if (s === 1) {
-      if (!form.name || form.name.trim().length < 2)
-        e.name = "Tell us your name.";
-      if (!EMAIL_RE.test(form.email)) e.email = "A valid email, please.";
-    }
+    if (!form.name.trim() || form.name.trim().length < 2) e.name = "Please enter your full name.";
+    if (!EMAIL_RE.test(form.email))                        e.email = "Please enter a valid email.";
+    if (!form.guests)                                      e.guests = "Please choose a party size.";
+    if (!form.booking_date)                                e.booking_date = "Please choose a date.";
+    else if (form.booking_date < today)                    e.booking_date = "Date can't be in the past.";
+    if (!form.booking_time)                                e.booking_time = "Please select a time.";
     setErrors(e);
     return Object.keys(e).length === 0;
-  };
+  }
 
-  const next = () => validateStep(step) && setStep((s) => Math.min(s + 1, 2));
-  const back = () => setStep((s) => Math.max(s - 1, 0));
+  /* ── Submit ─────────────────────────────────────────────────── */
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!validate()) return;
 
-  /* ---- submit ---- */
-  const submit = async () => {
-    if (!validateStep(0) || !validateStep(1)) {
-      setStep(0);
-      return;
-    }
     setStatus("submitting");
-    setServerError("");
+    setServerErr("");
+
+    // Parse guests number from "2 people" → 2
+    const guestNum = parseInt(form.guests) || 1;
+    // Build full phone string
+    const phone = form.phone ? `+62${form.phone.replace(/^0/, "")}` : null;
+
     try {
       const res = await fetch(`${API_BASE}/api/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          phone: form.phone || null,
+          name:         form.name.trim(),
+          email:        form.email.trim().toLowerCase(),
+          phone,
           booking_date: form.booking_date,
-          booking_time: form.booking_time || null,
-          guests: Number(form.guests),
-          message: form.message || null,
+          booking_time: form.booking_time,
+          guests:       guestNum,
+          message:      form.message.trim() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          data?.details?.join(" · ") || data?.error || `Request failed (${res.status})`
-        );
-      }
-      setConfirmation(data.booking);
+      if (!res.ok) throw new Error(data?.details?.join(" · ") || data?.error || `Error ${res.status}`);
+      setConfirmed(data.booking);
       setStatus("success");
     } catch (err) {
-      setServerError(err.message || "Something went wrong. Please try again.");
+      setServerErr(err.message || "Something went wrong. Please try again.");
       setStatus("error");
     }
-  };
+  }
 
-  const reset = () => {
-    setForm(EMPTY);
-    setErrors({});
-    setStep(0);
-    setStatus("idle");
-    setConfirmation(null);
-    setServerError("");
-  };
-
-  const dateLabel = useMemo(() => {
-    if (!form.booking_date) return "—";
-    return new Date(form.booking_date).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  }, [form.booking_date]);
-
-  return (
-    <div className="flex min-h-screen flex-col bg-[#f4efe6] font-['Hanken_Grotesk'] text-[#16271d] antialiased lg:flex-row">
-      {/* ---- Visual panel ---- */}
-      <aside className="relative hidden w-[42%] shrink-0 lg:block">
-        <img src={HERO} alt="" className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0e1b13]/85 via-[#0e1b13]/20 to-transparent" />
-        <div className="absolute inset-0 flex flex-col justify-between p-10 text-[#f4efe6]">
-          <Link to="/" className="font-['Fraunces'] text-2xl">
-            this<span className="italic text-[#c9a96a]">bali</span>
-          </Link>
-          <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-[#c9a96a]">
-              Reservation
+  /* ── Success screen ─────────────────────────────────────────── */
+  if (status === "success") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white px-6 font-['Nunito']"
+        style={{ fontFamily: "'Nunito', sans-serif" }}>
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-black text-4xl">
+            🏆
+          </div>
+          <h1 className="text-2xl font-extrabold text-gray-900">Reservation Confirmed!</h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
+            Thank you{confirmed?.name ? `, ${confirmed.name.split(" ")[0]}` : ""}!
+            We'll see you at THIS IS BALI. A confirmation has been sent to{" "}
+            <span className="font-semibold text-gray-800">{confirmed?.email}</span>.
+          </p>
+          {confirmed?.id && (
+            <p className="mt-3 text-xs text-gray-400">
+              Booking reference: #{String(confirmed.id).padStart(5, "0")}
             </p>
-            <h1 className="mt-3 max-w-xs font-['Fraunces'] text-4xl font-light leading-tight">
-              Let's hold your place in the quiet.
-            </h1>
+          )}
+          <div className="mt-8 flex flex-col gap-3">
+            <a href="/"
+              className="w-full rounded-full bg-black py-3.5 text-sm font-extrabold uppercase tracking-widest text-white hover:bg-gray-900 transition-colors">
+              Back to Home
+            </a>
+            <a href="https://wa.me/6281138104002" target="_blank" rel="noreferrer"
+              className="w-full rounded-full border-2 border-gray-200 py-3.5 text-sm font-extrabold uppercase tracking-widest text-gray-800 hover:bg-gray-50 transition-colors">
+              WhatsApp Us
+            </a>
           </div>
         </div>
-      </aside>
-
-      {/* ---- Form panel ---- */}
-      <main className="flex flex-1 items-center justify-center px-6 py-12 sm:px-12">
-        <div className="w-full max-w-lg">
-          {status === "success" ? (
-            <SuccessPanel confirmation={confirmation} onReset={reset} />
-          ) : (
-            <>
-              <Stepper step={step} />
-
-              {step === 0 && (
-                <Section title="When are you coming?" subtitle="Choose your dates and party size.">
-                  <Field label="Arrival date" error={errors.booking_date}>
-                    <input
-                      type="date"
-                      value={form.booking_date}
-                      min={new Date().toISOString().split("T")[0]}
-                      onChange={set("booking_date")}
-                      className={inputCls(errors.booking_date)}
-                    />
-                  </Field>
-                  <Field label="Preferred check-in time (optional)">
-                    <input
-                      type="time"
-                      value={form.booking_time}
-                      onChange={set("booking_time")}
-                      className={inputCls()}
-                    />
-                  </Field>
-                  <Field label="Guests" error={errors.guests}>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={form.guests}
-                      onChange={set("guests")}
-                      className={inputCls(errors.guests)}
-                    />
-                  </Field>
-                </Section>
-              )}
-
-              {step === 1 && (
-                <Section title="Who shall we expect?" subtitle="We'll send your confirmation here.">
-                  <Field label="Full name" error={errors.name}>
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={set("name")}
-                      placeholder="Jane Traveller"
-                      className={inputCls(errors.name)}
-                    />
-                  </Field>
-                  <Field label="Email" error={errors.email}>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={set("email")}
-                      placeholder="jane@email.com"
-                      className={inputCls(errors.email)}
-                    />
-                  </Field>
-                  <Field label="Phone (optional)">
-                    <input
-                      type="tel"
-                      value={form.phone}
-                      onChange={set("phone")}
-                      placeholder="+62 ..."
-                      className={inputCls()}
-                    />
-                  </Field>
-                </Section>
-              )}
-
-              {step === 2 && (
-                <Section title="Anything we should know?" subtitle="Then take a last look before you send.">
-                  <Field label="Notes or requests (optional)">
-                    <textarea
-                      rows={3}
-                      value={form.message}
-                      onChange={set("message")}
-                      placeholder="Dietary needs, arrival details, a celebration…"
-                      className={`${inputCls()} resize-none`}
-                    />
-                  </Field>
-
-                  <dl className="mt-6 divide-y divide-[#16271d]/10 rounded-2xl border border-[#16271d]/10 bg-white/40 px-5 text-sm">
-                    <Summary label="Dates" value={dateLabel} />
-                    <Summary label="Check-in" value={form.booking_time || "Flexible"} />
-                    <Summary label="Guests" value={form.guests} />
-                    <Summary label="Name" value={form.name || "—"} />
-                    <Summary label="Email" value={form.email || "—"} />
-                    {form.phone && <Summary label="Phone" value={form.phone} />}
-                  </dl>
-
-                  {status === "error" && (
-                    <p className="mt-4 rounded-xl bg-[#c1683f]/10 px-4 py-3 text-sm text-[#a4471f]">
-                      {serverError}
-                    </p>
-                  )}
-                </Section>
-              )}
-
-              {/* ---- nav buttons ---- */}
-              <div className="mt-8 flex items-center justify-between">
-                {step > 0 ? (
-                  <button
-                    onClick={back}
-                    className="text-sm tracking-wide text-[#16271d]/60 transition-colors hover:text-[#16271d]"
-                  >
-                    ← Back
-                  </button>
-                ) : (
-                  <Link
-                    to="/"
-                    className="text-sm tracking-wide text-[#16271d]/60 transition-colors hover:text-[#16271d]"
-                  >
-                    ← Home
-                  </Link>
-                )}
-
-                {step < 2 ? (
-                  <button
-                    onClick={next}
-                    className="rounded-full bg-[#16271d] px-8 py-3.5 text-sm font-medium tracking-wide text-[#f4efe6] transition-transform duration-300 hover:scale-[1.03]"
-                  >
-                    Continue
-                  </button>
-                ) : (
-                  <button
-                    onClick={submit}
-                    disabled={status === "submitting"}
-                    className="rounded-full bg-[#c1683f] px-8 py-3.5 text-sm font-medium tracking-wide text-[#f4efe6] transition-transform duration-300 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {status === "submitting" ? "Sending…" : "Confirm Reservation"}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-/* ---------- small presentational helpers ---------- */
-const inputCls = (err) =>
-  `w-full rounded-xl border bg-white/60 px-4 py-3 text-[15px] outline-none transition-colors placeholder:text-[#16271d]/35 focus:border-[#c1683f] focus:bg-white ${
-    err ? "border-[#c1683f]" : "border-[#16271d]/15"
-  }`;
-
-function Stepper({ step }) {
-  return (
-    <div className="mb-10 flex items-center gap-3">
-      {STEPS.map((label, i) => (
-        <div key={label} className="flex flex-1 items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={`grid h-7 w-7 place-items-center rounded-full text-xs font-medium transition-colors ${
-                i <= step ? "bg-[#16271d] text-[#f4efe6]" : "bg-[#16271d]/10 text-[#16271d]/50"
-              }`}
-            >
-              {i + 1}
-            </span>
-            <span
-              className={`hidden text-xs tracking-wide sm:block ${
-                i <= step ? "text-[#16271d]" : "text-[#16271d]/40"
-              }`}
-            >
-              {label}
-            </span>
-          </div>
-          {i < STEPS.length - 1 && (
-            <span
-              className={`h-px flex-1 transition-colors ${
-                i < step ? "bg-[#16271d]" : "bg-[#16271d]/15"
-              }`}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Section({ title, subtitle, children }) {
-  return (
-    <div>
-      <h2 className="font-['Fraunces'] text-3xl font-light leading-tight">{title}</h2>
-      {subtitle && <p className="mt-2 text-sm text-[#16271d]/60">{subtitle}</p>}
-      <div className="mt-7 space-y-5">{children}</div>
-    </div>
-  );
-}
-
-function Field({ label, error, children }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs uppercase tracking-[0.2em] text-[#16271d]/55">
-        {label}
-      </span>
-      {children}
-      {error && <span className="mt-1 block text-xs text-[#c1683f]">{error}</span>}
-    </label>
-  );
-}
-
-function Summary({ label, value }) {
-  return (
-    <div className="flex items-center justify-between py-3">
-      <dt className="text-[#16271d]/55">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
-  );
-}
-
-function SuccessPanel({ confirmation, onReset }) {
-  return (
-    <div className="text-center">
-      <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#16271d] text-[#c9a96a]">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="1.8" />
-        </svg>
       </div>
-      <h2 className="mt-7 font-['Fraunces'] text-4xl font-light">You're booked.</h2>
-      <p className="mx-auto mt-3 max-w-sm text-sm text-[#16271d]/65">
-        Thank you{confirmation?.name ? `, ${confirmation.name.split(" ")[0]}` : ""}. A
-        confirmation is on its way to {confirmation?.email}. We can't wait to
-        welcome you.
-      </p>
-      {confirmation?.id && (
-        <p className="mt-4 text-xs uppercase tracking-[0.3em] text-[#16271d]/40">
-          Reference · #{confirmation.id}
-        </p>
-      )}
-      <div className="mt-9 flex justify-center gap-4">
-        <Link
-          to="/"
-          className="rounded-full bg-[#16271d] px-7 py-3.5 text-sm tracking-wide text-[#f4efe6] transition-transform hover:scale-[1.03]"
-        >
-          Back home
-        </Link>
-        <button
-          onClick={onReset}
-          className="rounded-full border border-[#16271d]/20 px-7 py-3.5 text-sm tracking-wide transition-colors hover:bg-[#16271d]/5"
-        >
-          Book another
-        </button>
+    );
+  }
+
+  /* ── Main form ──────────────────────────────────────────────── */
+  return (
+    <div className="flex min-h-screen font-['Nunito']" style={{ fontFamily: "'Nunito', sans-serif" }}>
+
+      {/* ── LEFT: restaurant photo panel ────────────────────────── */}
+      <div className="sticky top-0 hidden h-screen w-[45%] shrink-0 overflow-hidden lg:block">
+        <img
+          src={PANEL_IMG}
+          alt="THIS IS BALI restaurant"
+          className="h-full w-full object-cover"
+        />
+        {/* bottom info overlay */}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-6 pb-6 pt-20">
+          <p className="text-xl font-extrabold uppercase tracking-wide text-white">
+            THIS IS BALI
+          </p>
+          <p className="mt-1 text-sm text-white/70">
+            Indonesian&nbsp;·&nbsp;$$&nbsp;·&nbsp;4.9 (7.1k reviews)
+          </p>
+        </div>
+      </div>
+
+      {/* ── RIGHT: form panel ───────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className="mx-auto max-w-lg px-6 py-10 lg:px-10 lg:py-12">
+
+          {/* Header */}
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-extrabold text-gray-900 lg:text-3xl">
+              Your VIP Reservation
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">
+              How it works: Book your table and get the first available table at your chosen time.
+            </p>
+            <p className="mt-2 text-sm italic text-gray-500">
+              Average wait with VIP reservation is currently 5 minutes.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} noValidate>
+
+            {/* Full Name */}
+            <Field label="Your Full Name" error={errors.name}>
+              <IconInput
+                icon={<IconPerson />}
+                type="text"
+                placeholder="Enter your name"
+                value={form.name}
+                onChange={set("name")}
+                error={errors.name}
+              />
+            </Field>
+
+            {/* Email */}
+            <Field label="Your Email" error={errors.email}>
+              <IconInput
+                icon={<IconEmail />}
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={set("email")}
+                error={errors.email}
+              />
+            </Field>
+
+            {/* Phone — Indonesian +62 prefix */}
+            <Field label="Your Phone Number">
+              <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3 focus-within:border-gray-400 transition-colors">
+                {/* Flag + code */}
+                <div className="flex shrink-0 items-center gap-1.5 border-r border-gray-200 pr-3">
+                  <span className="text-base">🇮🇩</span>
+                  <span className="text-sm font-semibold text-gray-700">+62</span>
+                </div>
+                <input
+                  type="tel"
+                  placeholder="812 3456 7890"
+                  value={form.phone}
+                  onChange={set("phone")}
+                  className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
+                />
+              </div>
+            </Field>
+
+            {/* Party size */}
+            <Field label="How many people are coming:" error={errors.guests}>
+              <div className={`flex items-center rounded-lg border bg-white transition-colors
+                ${errors.guests ? "border-red-400" : "border-gray-200 focus-within:border-gray-400"}`}>
+                <select
+                  value={form.guests}
+                  onChange={set("guests")}
+                  className="w-full cursor-pointer appearance-none bg-transparent px-4 py-3 text-sm text-gray-800 outline-none">
+                  <option value="" disabled>- choose size -</option>
+                  {SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <span className="mr-3 text-gray-400">▾</span>
+              </div>
+            </Field>
+
+            {/* Preferred Date */}
+            <Field label="Preferred Date" error={errors.booking_date}>
+              <div className={`flex items-center gap-3 rounded-lg border bg-white px-3 py-3 transition-colors
+                ${errors.booking_date ? "border-red-400" : "border-gray-200 focus-within:border-gray-400"}`}>
+                <IconCal />
+                <input
+                  type="date"
+                  value={form.booking_date}
+                  min={today}
+                  onChange={set("booking_date")}
+                  className="w-full bg-transparent text-sm text-gray-800 outline-none [color-scheme:light]"
+                />
+              </div>
+            </Field>
+
+            {/* Preferred Time — disabled until date chosen */}
+            <Field label="Preferred Time" error={errors.booking_time}>
+              {!form.booking_date ? (
+                <p className="text-sm text-red-500">*Please select a date first</p>
+              ) : (
+                <div className={`flex items-center rounded-lg border bg-white transition-colors
+                  ${errors.booking_time ? "border-red-400" : "border-gray-200 focus-within:border-gray-400"}`}>
+                  <select
+                    value={form.booking_time}
+                    onChange={set("booking_time")}
+                    className="w-full cursor-pointer appearance-none bg-transparent px-4 py-3 text-sm text-gray-800 outline-none">
+                    <option value="" disabled>- choose time -</option>
+                    {TIME_SLOTS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <span className="mr-3 text-gray-400">▾</span>
+                </div>
+              )}
+            </Field>
+
+            {/* Special request */}
+            <Field label="Do you have a special request?:">
+              <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3 focus-within:border-gray-400 transition-colors">
+                <span className="mt-0.5 shrink-0"><IconPencil /></span>
+                <textarea
+                  rows={3}
+                  value={form.message}
+                  onChange={set("message")}
+                  placeholder="Add your special request"
+                  className="w-full resize-none bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
+                />
+              </div>
+            </Field>
+
+            {/* Server error */}
+            {status === "error" && (
+              <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-200">
+                {serverErr}
+              </p>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={status === "submitting"}
+              className="w-full rounded-full bg-black py-4 text-sm font-extrabold uppercase tracking-wide text-white transition-all hover:bg-gray-900 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 shadow-md">
+              {status === "submitting" ? "Processing…" : "Confirm Reservation"}
+            </button>
+
+            {/* Back link */}
+            <p className="mt-6 text-center text-xs text-gray-400">
+              <a href="/" className="hover:underline hover:text-gray-600 transition-colors">
+                ← Back to THIS IS BALI
+              </a>
+            </p>
+
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -2,7 +2,8 @@
   "name": "thisbali-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "THIS IS BALI — bookings API (Express, layered MVC architecture)",
+  "type": "module",
+  "description": "THIS IS BALI — bookings API (Express, layered MVC architecture, ESM)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

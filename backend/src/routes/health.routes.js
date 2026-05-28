@@ -1,9 +1,10 @@
-const { Router } = require("express");
-const healthController = require("../controllers/health.controller");
+import express from "express";
+import * as healthController from "../controllers/health.controller.js";
 
+const { Router } = express;
 const router = Router();
 
 // GET /api/health
 router.get("/", healthController.check);
 
-module.exports = router;
+export default router;

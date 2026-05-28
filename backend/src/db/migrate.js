@@ -3,13 +3,16 @@
  * Applies schema.sql. Idempotent (uses IF NOT EXISTS), so it's safe to re-run.
  * Usage: npm run migrate
  */
-const fs = require("fs");
-const path = require("path");
-const { pool } = require("../config/database");
-const logger = require("../utils/logger");
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { pool } from "../config/database.js";
+import logger from "../utils/logger.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function migrate() {
-  const sql = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
+  const sql = readFileSync(join(__dirname, "schema.sql"), "utf8");
   await pool.query(sql);
   logger.info("Migration complete: schema applied.");
 }

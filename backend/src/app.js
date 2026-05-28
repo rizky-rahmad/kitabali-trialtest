@@ -3,16 +3,16 @@
  * Builds and configures the Express application. Kept separate from server.js
  * so it can be imported by tests (e.g. supertest) without binding a port.
  */
-const express = require("express");
-const helmet = require("helmet");
-const cors = require("cors");
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
 
-const config = require("./config/env");
-const requestLogger = require("./middleware/requestLogger");
-const { apiLimiter, bookingLimiter } = require("./middleware/rateLimiter");
-const notFound = require("./middleware/notFound");
-const errorHandler = require("./middleware/errorHandler");
-const apiRoutes = require("./routes");
+import config from "./config/env.js";
+import requestLogger from "./middleware/requestLogger.js";
+import { apiLimiter, bookingLimiter } from "./middleware/rateLimiter.js";
+import notFound from "./middleware/notFound.js";
+import errorHandler from "./middleware/errorHandler.js";
+import apiRoutes from "./routes/index.js";
 
 const app = express();
 
@@ -26,9 +26,9 @@ app.use(helmet());
 app.use(
   cors({
     origin: config.corsOrigins.includes("*") ? true : config.corsOrigins,
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "x-admin-key"],
-  })
+  }),
 );
 
 // Body parsing
@@ -48,4 +48,4 @@ app.use("/api", apiRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

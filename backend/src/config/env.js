@@ -4,8 +4,8 @@
  * If anything required is missing/invalid, the process exits immediately
  * with a clear message instead of failing mysteriously later.
  */
-require("dotenv").config();
-const { z } = require("zod");
+import "dotenv/config";
+import { z } from "zod";
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -36,17 +36,18 @@ if (!parsed.success) {
   const issues = parsed.error.issues
     .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
     .join("\n");
-  // eslint-disable-next-line no-console
   console.error(`\n✖ Invalid environment configuration:\n${issues}\n`);
   process.exit(1);
 }
 
 const env = parsed.data;
 
-module.exports = {
+const config = {
   ...env,
   isProd: env.NODE_ENV === "production",
   isTest: env.NODE_ENV === "test",
   corsOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
   pgSsl: env.PGSSL === "true",
 };
+
+export default config;

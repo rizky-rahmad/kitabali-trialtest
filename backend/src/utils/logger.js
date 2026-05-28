@@ -15,9 +15,11 @@ function write(level, msg, meta) {
   else out(line);
 }
 
-module.exports = {
+const logger = {
   error: (msg, meta) => write("error", msg, meta),
   warn: (msg, meta) => write("warn", msg, meta),
   info: (msg, meta) => write("info", msg, meta),
   debug: (msg, meta) => write("debug", msg, meta),
 };
+
+export default logger;

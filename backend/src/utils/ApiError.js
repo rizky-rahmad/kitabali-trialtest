@@ -4,7 +4,7 @@
  * turns them into consistent JSON responses. `isOperational` distinguishes
  * expected errors (bad input, auth) from genuine bugs.
  */
-class ApiError extends Error {
+export default class ApiError extends Error {
   constructor(statusCode, message, details = undefined, { isOperational = true } = {}) {
     super(message);
     this.name = "ApiError";
@@ -27,5 +27,3 @@ class ApiError extends Error {
     return new ApiError(500, message, undefined, { isOperational: false });
   }
 }
-
-module.exports = ApiError;

@@ -5,16 +5,15 @@
  * Operational errors (ApiError) surface their message; unexpected errors are
  * logged with a stack and hidden behind a generic message in production.
  */
-const ApiError = require("../utils/ApiError");
-const logger = require("../utils/logger");
-const config = require("../config/env");
+import ApiError from "../utils/ApiError.js";
+import logger from "../utils/logger.js";
+import config from "../config/env.js";
 
 // eslint-disable-next-line no-unused-vars
-function errorHandler(err, req, res, _next) {
+export default function errorHandler(err, req, res, _next) {
   const isApiError = err instanceof ApiError;
   const statusCode = isApiError ? err.statusCode : 500;
 
-  // Log server errors and anything non-operational with full detail.
   if (statusCode >= 500 || !isApiError || !err.isOperational) {
     logger.error(`${req.method} ${req.originalUrl} -> ${statusCode}`, err);
   }
@@ -29,5 +28,3 @@ function errorHandler(err, req, res, _next) {
 
   res.status(statusCode).json(body);
 }
-
-module.exports = errorHandler;

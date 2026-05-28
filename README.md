@@ -16,7 +16,7 @@ viewing submitted bookings.
 |--------------|-----------------------------------|-----|
 | Frontend     | React 18 + Vite + Tailwind CSS    | Instant HMR, tiny production build, utility-first styling for a fully custom UI |
 | Routing      | React Router v6                   | Client-side routing across the three pages |
-| Backend      | Node.js + Express                 | REST API in a layered (MVC-style) architecture |
+| Backend      | Node.js + Express (ESM)           | REST API in a layered (MVC-style) architecture, ES modules throughout |
 | Validation   | Zod                               | Declarative, type-safe request validation |
 | Security     | Helmet + express-rate-limit       | Hardened headers; abuse protection on the public endpoint |
 | Database     | PostgreSQL (`pg`)                 | Relational store; parameterized queries only |
@@ -215,11 +215,12 @@ The two SPA-routing pieces are already in the repo: `frontend/public/_redirects`
 
 ## Implementation Decisions
 
-- **Layered architecture (MVC-style).** Requests flow Route → Controller →
-  Service → Repository → DB, with each layer owning one responsibility:
-  controllers only handle HTTP, services hold business rules, repositories hold
-  the only SQL, and models own serialization. This keeps the code testable and
-  easy to extend (a new endpoint rarely touches more than its own slice).
+- **Layered architecture (MVC-style), ES modules.** Requests flow Route →
+  Controller → Service → Repository → DB, with each layer owning one
+  responsibility: controllers only handle HTTP, services hold business rules,
+  repositories hold the only SQL, and models own serialization. The codebase uses
+  modern `import`/`export` (ESM, `"type": "module"`), and `app` is exported
+  separately from the server entry so it can be tested without binding a port.
 - **Fail-fast config.** All environment variables are validated with Zod at boot
   (`config/env.js`); a missing `ADMIN_KEY` stops the process with a clear message
   rather than failing at request time.

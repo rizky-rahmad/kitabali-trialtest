@@ -1,31 +1,36 @@
-/**
- * services/booking.service.js
- * Business logic + orchestration. Talks to repositories, applies domain rules,
- * returns API-ready data. Knows nothing about Express (no req/res).
- */
-const bookingRepository = require("../repositories/booking.repository");
-const { toPublic } = require("../models/booking.model");
-const ApiError = require("../utils/ApiError");
+import * as repo from "../repositories/booking.repository.js";
+import { toPublic } from "../models/booking.model.js";
+import ApiError from "../utils/ApiError.js";
 
-/** Domain rule: a booking date may not be in the past. */
-function assertDateNotInPast(dateStr) {
-  const date = new Date(dateStr);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (date < today) {
-    throw ApiError.badRequest("Validation failed", ["booking_date cannot be in the past"]);
-  }
+function assertNotPast(dateStr) {
+  const d = new Date(dateStr), today = new Date();
+  today.setHours(0,0,0,0);
+  if (d < today) throw ApiError.badRequest("Validation failed", ["booking_date cannot be in the past"]);
 }
 
-async function createBooking(input) {
-  assertDateNotInPast(input.booking_date);
-  const row = await bookingRepository.create(input);
-  return toPublic(row);
+/** Public booking — enforces no-past-date rule */
+export async function createBooking(input) {
+  assertNotPast(input.booking_date);
+  return toPublic(await repo.create(input));
 }
 
-async function listBookings() {
-  const rows = await bookingRepository.findAll();
-  return rows.map(toPublic);
+/** Admin booking — no past-date restriction */
+export async function adminCreateBooking(input) {
+  return toPublic(await repo.create(input));
 }
 
-module.exports = { createBooking, listBookings };
+export async function listBookings() {
+  return (await repo.findAll()).map(toPublic);
+}
+
+export async function updateBooking(id, input) {
+  const existing = await repo.findById(id);
+  if (!existing) throw ApiError.notFound(`Booking #${id} not found`);
+  return toPublic(await repo.update(id, input));
+}
+
+export async function deleteBooking(id) {
+  const existing = await repo.findById(id);
+  if (!existing) throw ApiError.notFound(`Booking #${id} not found`);
+  await repo.remove(id);
+}

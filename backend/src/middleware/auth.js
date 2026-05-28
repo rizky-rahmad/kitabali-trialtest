@@ -3,10 +3,10 @@
  * Guards admin routes with a shared-secret header (x-admin-key).
  * For production this should become a real session/JWT scheme.
  */
-const ApiError = require("../utils/ApiError");
-const config = require("../config/env");
+import ApiError from "../utils/ApiError.js";
+import config from "../config/env.js";
 
-function requireAdminKey(req, _res, next) {
+export function requireAdminKey(req, _res, next) {
   // env.js guarantees ADMIN_KEY exists, but guard defensively anyway.
   if (!config.ADMIN_KEY) {
     return next(ApiError.internal("ADMIN_KEY is not configured"));
@@ -17,5 +17,3 @@ function requireAdminKey(req, _res, next) {
   }
   next();
 }
-
-module.exports = { requireAdminKey };

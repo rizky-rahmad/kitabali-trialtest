@@ -5,15 +5,16 @@
  *   /api/admin/bookings  -> admin.routes
  *   /api/health          -> health.routes
  */
-const { Router } = require("express");
-const bookingRoutes = require("./booking.routes");
-const adminRoutes = require("./admin.routes");
-const healthRoutes = require("./health.routes");
+import express from "express";
+import bookingRoutes from "./booking.routes.js";
+import adminRoutes from "./admin.routes.js";
+import healthRoutes from "./health.routes.js";
 
+const { Router } = express;
 const router = Router();
 
 router.use("/bookings", bookingRoutes);
 router.use("/admin", adminRoutes);
 router.use("/health", healthRoutes);
 
-module.exports = router;
+export default router;
